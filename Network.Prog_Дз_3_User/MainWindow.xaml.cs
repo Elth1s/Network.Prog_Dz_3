@@ -92,13 +92,9 @@ namespace Network.Prog_Дз_3_User
         {
             secondsDelay = Convert.ToInt32((sender as RadioButton).Content);
         }
-        public static BitmapSource BitmaSourceFromByteArray(byte[] buffer)
+        public BitmapSource BitmaSourceFromByteArray(byte[] buffer)
         {
-            using (var stream = new MemoryStream(buffer))
-            {
-                return BitmapFrame.Create(
-                    stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
-            }
+            return (BitmapSource)new ImageSourceConverter().ConvertFrom(buffer);
         }
     }
 }

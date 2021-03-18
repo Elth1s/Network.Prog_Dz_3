@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Xml.Serialization;
 
@@ -63,24 +64,40 @@ namespace Network.Prog_Дз_3_Server
                 Console.WriteLine(DateTime.Now.ToShortTimeString() + ": " + builder.ToString());
                 Thread.Sleep(int.Parse(builder.ToString()) * 1000);
 
-                data = PrintScreen();
-                handler.Send(data);
+                Bitmap printscreen = new Bitmap(Screen.PrimaryScreen.Bounds.Width, Screen.PrimaryScreen.Bounds.Height);
+                Graphics graphics = Graphics.FromImage(printscreen as Image);
+                graphics.CopyFromScreen(0, 0, 0, 0, printscreen.Size);
+
+                var bitmapSource = Convert(printscreen);
+                handler.Send(BitmapSourceToArray(bitmapSource));
             }
 
 
         }
-        static byte[] PrintScreen()
+        public static byte[] BitmapSourceToArray(BitmapSource bitmapSource)
         {
-            Bitmap printscreen = new Bitmap(Screen.PrimaryScreen.Bounds.Width, Screen.PrimaryScreen.Bounds.Height);
-            Graphics graphics = Graphics.FromImage(printscreen as Image);
-            graphics.CopyFromScreen(0, 0, 0, 0, printscreen.Size);
+            int stride = (int)bitmapSource.PixelWidth * (bitmapSource.Format.BitsPerPixel + 7) / 8;
+            byte[] pixels = new byte[(int)bitmapSource.PixelHeight * stride];
 
-            using (var memoryStream = new MemoryStream())
-            {
-                printscreen.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Jpeg);
-                return memoryStream.ToArray();
-            }
+            bitmapSource.CopyPixels(pixels, stride, 0);
 
+            return pixels;
+        }
+        public static BitmapSource Convert(System.Drawing.Bitmap bitmap)
+        {
+            var bitmapData = bitmap.LockBits(
+                new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly, bitmap.PixelFormat);
+
+            var bitmapSource = BitmapSource.Create(
+                bitmapData.Width, bitmapData.Height,
+                bitmap.HorizontalResolution, bitmap.VerticalResolution,
+                PixelFormats.Bgr24, null,
+                bitmapData.Scan0, bitmapData.Stride * bitmapData.Height, bitmapData.Stride);
+
+            bitmap.UnlockBits(bitmapData);
+
+            return bitmapSource;
         }
     }
 }
