@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Network.Prog_Дз_3_Server;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -6,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -37,51 +39,31 @@ namespace Network.Prog_Дз_3_User
         private void StartButton_Click(object sender, RoutedEventArgs e)
         {
             isStarted = true;
-            Task.Run(() => GettingScreenshots());
-        }
-        private void GettingScreenshots()
-        {
-            IPEndPoint ipPoint = new IPEndPoint(iPAddress, port);
-            Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            socket.Connect(ipPoint);
-
-            try
-            {
+            Task.Run(() => {
+                IPEndPoint endPoint = new IPEndPoint(iPAddress, port);
                 while (true)
                 {
-                    if (isStarted == false) return;
-                    byte[] data = Encoding.Unicode.GetBytes(secondsDelay.ToString());
-                    socket.Send(data);
-
-                    data = new byte[256];
-                    StringBuilder builder = new StringBuilder();
-                    int bytes = 0;
-
-                    do
+                    if (isStarted == false)
                     {
-                        bytes = socket.Receive(data, data.Length, 0);
+                        MessageBox.Show("Stoped");
+                        return;
                     }
-                    while (socket.Available > 0);
 
-
-                    Application.Current.Dispatcher.Invoke(new Action(() =>
+                    TcpClient client = new TcpClient();
+                    client.Connect(endPoint);
+                    // виконуємо підключення
+                    Thread.Sleep(secondsDelay);
+                    // створюємо клас, який містить інформацію про файл
+                    XmlSerializer serializer = new XmlSerializer(typeof(FileTransferInfo));
+                    var info = (FileTransferInfo)serializer.Deserialize(client.GetStream());
+                    using (FileStream fs = new FileStream(info.Name, FileMode.Create, FileAccess.Write))
                     {
-                        var bitmapImage = BitmaSourceFromByteArray(data);
-                        image.Source = bitmapImage;
-
-                    }));
+                        fs.Write(info.Data, 0, info.Data.Length);
+                    }
+                    
+                    client.Close();
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-            finally
-            {
-                socket?.Shutdown(SocketShutdown.Both);
-                socket?.Close();
-            }
-
+            });
         }
         private void StopButton_Click(object sender, RoutedEventArgs e)
         {
@@ -92,9 +74,6 @@ namespace Network.Prog_Дз_3_User
         {
             secondsDelay = Convert.ToInt32((sender as RadioButton).Content);
         }
-        public BitmapSource BitmaSourceFromByteArray(byte[] buffer)
-        {
-            return (BitmapSource)new ImageSourceConverter().ConvertFrom(buffer);
-        }
+
     }
 }

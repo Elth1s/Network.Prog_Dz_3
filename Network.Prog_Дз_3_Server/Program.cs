@@ -15,89 +15,73 @@ using System.Xml.Serialization;
 
 namespace Network.Prog_Дз_3_Server
 {
+    [Serializable] // атрибут для серіалізації об'єкта класа
+    public class FileTransferInfo
+    {
+        // ім'я файла
+        public string Name { get; set; }
+        // вміст файла
+        public byte[] Data { get; set; }
+    }
     class Program
     {
+        static IPAddress iPAddress = IPAddress.Parse("127.0.0.1");
         static int port = 8080;
         static void Main(string[] args)
         {
-            IPAddress iPAddress = IPAddress.Parse("127.0.0.1");
-            IPEndPoint ipPoint = new IPEndPoint(iPAddress, port);
+            IPEndPoint localEndPoint = new IPEndPoint(iPAddress, port);
+            IPEndPoint clientEndPoint = new IPEndPoint(IPAddress.Any, 0);
 
+            // створюємо екземпляр сервера вказуючи кінцеву точку для приєднання
+            TcpListener server = new TcpListener(localEndPoint);
+            // запускаємо прослуховування вказаної кінцевої точки
+            server.Start(10);
 
-            Socket listenSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            try
-            {
-
-                listenSocket.Bind(ipPoint);
-
-
-                listenSocket.Listen(10);
-
-                Console.WriteLine("Server started! Waiting for connection...");
-
-                while (true)
-                {
-                    Socket handler = listenSocket.Accept();
-                    Task.Run(() => SendScreenshots(handler));
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-        }
-
-        static void SendScreenshots(Socket handler)
-        {
-            StringBuilder builder = new StringBuilder();
-            int bytes = 0;
-            byte[] data = new byte[256];
+                    Console.WriteLine("\tWaiting for file...");
             while (true)
             {
-
-                do
+                try
                 {
-                    bytes = handler.Receive(data);
-                    builder.Append(Encoding.Unicode.GetString(data, 0, bytes));
+                    // отримуємо зв'язок з клієнтом
+                    TcpClient client = server.AcceptTcpClient();
+
+                    // отримуємо дані від клієнта
+                    // та десеріалізуємо об'єкт
+                    Graphics graph = null;
+
+                    var bmp = new Bitmap(Screen.PrimaryScreen.Bounds.Width,
+                    Screen.PrimaryScreen.Bounds.Height);
+                    graph = Graphics.FromImage(bmp);
+                    graph.CopyFromScreen(0, 0, 0, 0, bmp.Size);
+                    bmp.Save("screen.png");
+                    FileTransferInfo info = new FileTransferInfo();
+                    info.Name = Path.GetFileName("screen.png");
+                    using (FileStream fs = new FileStream("screen.png", FileMode.Open, FileAccess.Read))
+                    {
+
+                        byte[] fileData = new byte[fs.Length];
+                        fs.Read(fileData, 0, fileData.Length);
+                        info.Data = fileData;
+                    }
+
+                    XmlSerializer serializer = new XmlSerializer(typeof(FileTransferInfo));
+                    using (NetworkStream stream = client.GetStream())
+                    {
+                        serializer.Serialize(stream, info);
+                    }
                 }
-                while (handler.Available > 0);
-                Console.WriteLine(DateTime.Now.ToShortTimeString() + ": " + builder.ToString());
-                Thread.Sleep(int.Parse(builder.ToString()) * 1000);
-
-                Bitmap printscreen = new Bitmap(Screen.PrimaryScreen.Bounds.Width, Screen.PrimaryScreen.Bounds.Height);
-                Graphics graphics = Graphics.FromImage(printscreen as Image);
-                graphics.CopyFromScreen(0, 0, 0, 0, printscreen.Size);
-
-                var bitmapSource = Convert(printscreen);
-                handler.Send(BitmapSourceToArray(bitmapSource));
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
+                finally
+                {
+                    Console.ResetColor();
+                }
             }
 
-
-        }
-        public static byte[] BitmapSourceToArray(BitmapSource bitmapSource)
-        {
-            int stride = (int)bitmapSource.PixelWidth * (bitmapSource.Format.BitsPerPixel + 7) / 8;
-            byte[] pixels = new byte[(int)bitmapSource.PixelHeight * stride];
-
-            bitmapSource.CopyPixels(pixels, stride, 0);
-
-            return pixels;
-        }
-        public static BitmapSource Convert(System.Drawing.Bitmap bitmap)
-        {
-            var bitmapData = bitmap.LockBits(
-                new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
-                System.Drawing.Imaging.ImageLockMode.ReadOnly, bitmap.PixelFormat);
-
-            var bitmapSource = BitmapSource.Create(
-                bitmapData.Width, bitmapData.Height,
-                bitmap.HorizontalResolution, bitmap.VerticalResolution,
-                PixelFormats.Bgr24, null,
-                bitmapData.Scan0, bitmapData.Stride * bitmapData.Height, bitmapData.Stride);
-
-            bitmap.UnlockBits(bitmapData);
-
-            return bitmapSource;
+            // зупиняємо роботу сервера
+            server.Stop();
         }
     }
 }
